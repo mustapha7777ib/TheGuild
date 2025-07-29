@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "./AuthContext";
+import "./Profile.css";
 
 const abujaData = {
   cities: [
@@ -28,12 +29,12 @@ function Profile() {
     bio: "",
     reference: "",
   });
-
   const navigate = useNavigate();
   const [profilePic, setProfilePic] = useState(null);
   const [certificate, setCertificate] = useState(null);
   const [portfolio, setPortfolio] = useState([]);
   const [showCityDropdown, setShowCityDropdown] = useState(false);
+  const [citySearch, setCitySearch] = useState("");
   const [filteredCities, setFilteredCities] = useState(abujaData.cities);
   const [errorMessages, setErrorMessages] = useState({
     gender: "",
@@ -41,15 +42,20 @@ function Profile() {
     city: "",
     general: "",
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const phoneErrorRef = useRef(null);
+  const cityDropdownRef = useRef(null);
   const today = new Date().toISOString().split("T")[0];
 
-  // Handle loading state
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="loading-container">
+        <div className="loading-spinner"></div>
+        <span className="loading-text">Loading...</span>
+      </div>
+    );
   }
 
-  // Handle unauthenticated user
   if (!user) {
     console.log("Profile.jsx: No user, redirecting to signin");
     navigate("/signin");
@@ -62,12 +68,23 @@ function Profile() {
 
   const handleCityClick = () => {
     setShowCityDropdown(!showCityDropdown);
+    setCitySearch("");
+    setFilteredCities(abujaData.cities);
   };
 
   const handleCitySelect = (city) => {
     setFormData((prev) => ({ ...prev, city }));
     setErrorMessages((prev) => ({ ...prev, city: "" }));
     setShowCityDropdown(false);
+    setCitySearch("");
+  };
+
+  const handleCitySearch = (e) => {
+    const searchTerm = e.target.value.toLowerCase();
+    setCitySearch(searchTerm);
+    setFilteredCities(
+      abujaData.cities.filter((city) => city.toLowerCase().includes(searchTerm))
+    );
   };
 
   useEffect(() => {
@@ -76,20 +93,34 @@ function Profile() {
     }
   }, [errorMessages.phone]);
 
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (cityDropdownRef.current && !cityDropdownRef.current.contains(event.target)) {
+        setShowCityDropdown(false);
+        setCitySearch("");
+        setFilteredCities(abujaData.cities);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessages({ gender: "", phone: "", city: "", general: "" });
+    setIsSubmitting(true);
 
     if (!user?.id) {
       setErrorMessages({ ...errorMessages, general: "You must be logged in to register as an artisan." });
       navigate("/signin");
+      setIsSubmitting(false);
       return;
     }
 
     let formErrors = {};
-    const phoneRegex = /^0\d{10}$/;
+    const phoneRegex = /^(0\d{10}|\+234\d{10})$/;
     if (!formData.phone || !phoneRegex.test(formData.phone)) {
-      formErrors.phone = "Enter a valid Nigerian phone number (e.g., 08012345678)";
+      formErrors.phone = "Enter a valid Nigerian phone number (e.g., 08012345678 or +2348012345678)";
     }
 
     if (!formData.gender) {
@@ -102,6 +133,7 @@ function Profile() {
 
     if (Object.keys(formErrors).length > 0) {
       setErrorMessages(formErrors);
+      setIsSubmitting(false);
       return;
     }
 
@@ -141,176 +173,303 @@ function Profile() {
     } catch (err) {
       console.error("Profile.jsx: Registration error:", err.message);
       setErrorMessages((prev) => ({ ...prev, general: err.message }));
+    } finally {
+      setIsSubmitting(false);
     }
   };
-
   return (
-    <form onSubmit={handleSubmit} encType="multipart/form-data" className="artisan-registration-form">
-      <h2>Artisan Registration</h2>
-      {errorMessages.general && (
-        <div className="error-message" style={{ color: "red", marginBottom: "1rem" }}>
-          {errorMessages.general}
-        </div>
-      )}
-
-      <label>
-        First Name: <span className="aesterik">*</span>
-        <input name="firstname" value={formData.firstname} onChange={handleChange} required />
-      </label>
-
-      <label>
-        Last Name: <span className="aesterik">*</span>
-        <input name="lastname" value={formData.lastname} onChange={handleChange} required />
-      </label>
-
-      <label>
-        Phone Number: <span className="aesterik">*</span>
-        <input type="tel" name="phone" value={formData.phone} onChange={handleChange} required />
-        {errorMessages.phone && (
-          <div
-            ref={phoneErrorRef}
-            className="error-message"
-            style={{
-              color: "red",
-              fontStyle: "italic",
-              fontWeight: "bold",
-              fontSize: "0.8rem",
-              marginTop: "4px",
-            }}
-          >
-            {errorMessages.phone}
-          </div>
+      <form onSubmit={handleSubmit} encType="multipart/form-data" className="artisan-form">
+        <h2 className="form-title">Become an Artisan</h2>
+        {errorMessages.general && (
+          <div className="error-message general-error">{errorMessages.general}</div>
         )}
-      </label>
 
-      <label>
-        Email: <span className="aesterik">*</span>
-        <input type="email" name="email" value={formData.email} onChange={handleChange} required />
-      </label>
-
-      <label>
-        Gender: <span className="aesterik">*</span>
-        <select name="gender" value={formData.gender} onChange={handleChange} required>
-          <option value="">Select</option>
-          <option value="male">Male</option>
-          <option value="female">Female</option>
-          <option value="other">Other</option>
-        </select>
-        {errorMessages.gender && (
-          <div className="error-message" style={{ color: "red", fontSize: "0.8rem", marginTop: "4px" }}>
-            {errorMessages.gender}
-          </div>
-        )}
-      </label>
-
-      <label>
-        Date of Birth: <span className="aesterik">*</span>
-        <input
-          type="date"
-          name="dob"
-          value={formData.dob}
-          onChange={handleChange}
-          required
-          max={today}
-        />
-      </label>
-
-      <label>
-        City / Town: <span className="aesterik">*</span>
-        <div className="city-dropdown-wrapper">
+        <div className="form-group">
+          <label htmlFor="firstname">First Name <span className="required">*</span></label>
           <input
-            type="text"
-            name="city"
-            value={formData.city}
-            onClick={handleCityClick}
-            placeholder="Select City"
-            readOnly
+            id="firstname"
+            name="firstname"
+            value={formData.firstname}
+            onChange={handleChange}
+            className="form-input"
             required
+            aria-required="true"
           />
-          {showCityDropdown && (
-            <ul className="city-dropdown">
-              {filteredCities.map((city, index) => (
-                <li key={index} onClick={() => handleCitySelect(city)}>
-                  {city}
-                </li>
-              ))}
-            </ul>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="lastname">Last Name <span className="required">*</span></label>
+          <input
+            id="lastname"
+            name="lastname"
+            value={formData.lastname}
+            onChange={handleChange}
+            className="form-input"
+            required
+            aria-required="true"
+          />
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="phone">Phone Number <span className="required">*</span></label>
+          <input
+            id="phone"
+            type="tel"
+            name="phone"
+            value={formData.phone}
+            onChange={handleChange}
+            className="form-input"
+            required
+            aria-required="true"
+            aria-describedby={errorMessages.phone ? "phone-error" : undefined}
+          />
+          {errorMessages.phone && (
+            <div id="phone-error" ref={phoneErrorRef} className="error-message">
+              {errorMessages.phone}
+            </div>
           )}
         </div>
-        {errorMessages.city && (
-          <div className="error-message" style={{ color: "red", fontSize: "0.8rem", marginTop: "4px" }}>
-            {errorMessages.city}
-          </div>
-        )}
-      </label>
 
-      <label>
-        Full Address: <span className="aesterik">*</span>
-        <textarea name="address" value={formData.address} onChange={handleChange} required />
-      </label>
+        <div className="form-group">
+          <label htmlFor="email">Email <span className="required">*</span></label>
+          <input
+            id="email"
+            type="email"
+            name="email"
+            value={formData.email}
+            onChange={handleChange}
+            className="form-input"
+            required
+            aria-required="true"
+          />
+        </div>
 
-      <label>
-        Primary Skill / Trade: <span className="aesterik">*</span>
-        <select name="skill" value={formData.skill} onChange={handleChange} required>
-          <option value="">Select Skill</option>
-          <option value="Carpenter">Carpenter</option>
-          <option value="Electrician">Electrician</option>
-          <option value="Plumber">Plumber</option>
-          <option value="Welder">Welder</option>
-          <option value="Tiler">Tiler</option>
-          <option value="Cleaner">Cleaner</option>
-          <option value="Painter">Painter</option>
-          <option value="Gardener">Gardener</option>
-          <option value="Technician">Technician</option>
-        </select>
-      </label>
+        <div className="form-group">
+          <label htmlFor="gender">Gender <span className="required">*</span></label>
+          <select
+            id="gender"
+            name="gender"
+            value={formData.gender}
+            onChange={handleChange}
+            className="form-select"
+            required
+            aria-required="true"
+            aria-describedby={errorMessages.gender ? "gender-error" : undefined}
+          >
+            <option value="">Select Gender</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            <option value="other">Other</option>
+          </select>
+          {errorMessages.gender && (
+            <div id="gender-error" className="error-message">
+              {errorMessages.gender}
+            </div>
+          )}
+        </div>
 
-      <label>
-        Years of Experience: <span className="aesterik">*</span>
-        <input
-          type="number"
-          name="experience"
-          value={formData.experience}
-          onChange={handleChange}
-          min="0"
-          required
-        />
-      </label>
+        <div className="form-group">
+          <label htmlFor="dob">Date of Birth <span className="required">*</span></label>
+          <input
+            id="dob"
+            type="date"
+            name="dob"
+            value={formData.dob}
+            onChange={handleChange}
+            className="form-input"
+            required
+            max={today}
+            aria-required="true"
+          />
+        </div>
 
-      <label>
-        Brief Bio / About Me: <span className="aesterik">*</span>
-        <textarea name="bio" value={formData.bio} onChange={handleChange} required />
-      </label>
+        <div className="form-group">
+          <label htmlFor="city">City / Town <span className="required">*</span></label>
+          <div className="city-dropdown-wrapper" ref={cityDropdownRef}>
+            <input
+              id="city"
+              type="text"
+              name="city"
+              value={formData.city}
+              onClick={handleCityClick}
+              placeholder="Select City"
+              className="form-input"
+              readOnly
+              required
+              aria-required="true"
+              aria-describedby={errorMessages.city ? "city-error" : undefined}
+            />
+            {showCityDropdown && (
+              <div
+                className="city-dropdown"
+                style={{
+                  maxHeight: '150px',
+                  overflowY: 'scroll',
+                  border: '1px solid #ccc',
+                  marginTop: '0px',
+                  borderRadius: '4px',
+                  backgroundColor: '#fff',
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+              
+                {filteredCities.map((city, index) => (
+                  <div
+                    key={index}
+                    onClick={() => {
+                      handleCitySelect(city);
+                    }}
+                    style={{
+                      padding: '8px 12px',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid #eee',
+                    }}
+                  >
+                    {city}
+                  </div>
+                ))}
+                {filteredCities.length === 0 && (
+                  <div
+                    style={{
+                      padding: '8px 12px',
+                      color: '#666',
+                      textAlign: 'center',
+                    }}
+                  >
+                    No cities found
+                  </div>
+                )}
+              </div>
+            )}
+            </div>
+                          
+          {errorMessages.city && (
+            <div id="city-error" className="error-message">
+              {errorMessages.city}
+            </div>
+          )}
+        </div>
 
-      <label>
-        Reference (Optional):
-        <input name="reference" value={formData.reference} onChange={handleChange} />
-      </label>
+        <div className="form-group">
+          <label htmlFor="address">Full Address <span className="required">*</span></label>
+          <textarea
+            id="address"
+            name="address"
+            value={formData.address}
+            onChange={handleChange}
+            className="form-textarea"
+            required
+            aria-required="true"
+          />
+        </div>
 
-      <label>
-        Profile Picture (Optional):
-        <input type="file" accept="image/*" onChange={(e) => setProfilePic(e.target.files[0])} />
-      </label>
+        <div className="form-group">
+          <label htmlFor="skill">Primary Skill / Trade <span className="required">*</span></label>
+          <select
+            id="skill"
+            name="skill"
+            value={formData.skill}
+            onChange={handleChange}
+            className="form-select"
+            required
+            aria-required="true"
+          >
+            <option value="">Select Skill</option>
+            <option value="Carpenter">Carpenter</option>
+            <option value="Electrician">Electrician</option>
+            <option value="Plumber">Plumber</option>
+            <option value="Welder">Welder</option>
+            <option value="Tiler">Tiler</option>
+            <option value="Cleaner">Cleaner</option>
+            <option value="Painter">Painter</option>
+            <option value="Gardener">Gardener</option>
+            <option value="Technician">Technician</option>
+          </select>
+        </div>
 
-      <label>
-        Certificate or Training Proof (Optional):
-        <input type="file" accept=".pdf,image/*" onChange={(e) => setCertificate(e.target.files[0])} />
-      </label>
+        <div className="form-group">
+          <label htmlFor="experience">Years of Experience <span className="required">*</span></label>
+          <input
+            id="experience"
+            type="number"
+            name="experience"
+            value={formData.experience}
+            onChange={handleChange}
+            min="0"
+            className="form-input"
+            required
+            aria-required="true"
+          />
+        </div>
 
-      <label>
-        Portfolio (photos/videos of past work, Optional):
-        <input
-          type="file"
-          accept="image/*,video/*"
-          multiple
-          onChange={(e) => setPortfolio(Array.from(e.target.files))}
-        />
-      </label>
+        <div className="form-group">
+          <label htmlFor="bio">Brief Bio / About Me <span className="required">*</span></label>
+          <textarea
+            id="bio"
+            name="bio"
+            value={formData.bio}
+            onChange={handleChange}
+            className="form-textarea"
+            required
+            aria-required="true"
+          />
+        </div>
 
-      <button className="submitbutton" type="submit">
-        Submit
-      </button>
-    </form>
+        <div className="form-group">
+          <label htmlFor="reference">Reference (Optional)</label>
+          <input
+            id="reference"
+            name="reference"
+            value={formData.reference}
+            onChange={handleChange}
+            className="form-input"
+          />
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="profilePic">Profile Picture (Optional)</label>
+          <input
+            id="profilePic"
+            type="file"
+            accept="image/*"
+            onChange={(e) => setProfilePic(e.target.files[0])}
+            className="form-input"
+          />
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="certificate">Certificate or Training Proof (Optional)</label>
+          <input
+            id="certificate"
+            type="file"
+            accept=".pdf,image/*"
+            onChange={(e) => setCertificate(e.target.files[0])}
+            className="form-input"
+          />
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="portfolio">Portfolio (photos/videos of past work, Optional)</label>
+          <input
+            id="portfolio"
+            type="file"
+            accept="image/*,video/*"
+            multiple
+            onChange={(e) => setPortfolio(Array.from(e.target.files))}
+            className="form-input"
+          />
+        </div>
+
+        <button
+          type="submit"
+          className="submit-button"
+          disabled={isSubmitting}
+          aria-busy={isSubmitting}
+        >
+          {isSubmitting && <span className="submit-spinner"></span>}
+          {isSubmitting ? "Submitting..." : "Join as Artisan"}
+        </button>
+      </form>
   );
 }
 

@@ -79,113 +79,113 @@ function Workers() {
             </div>
 
                 <Modal
-  isOpen={isOpen}
-  onRequestClose={() => setIsOpen(false)}
-  style={{
-    overlay: {
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    },
-    content: {
-      top: '50%',
-      left: '50%',
-      right: 'auto',
-      bottom: 'auto',
-      marginRight: '-50%',
-      transform: 'translate(-50%, -50%)',
-      padding: '30px',
-      borderRadius: '12px',
-    },
-  }}
->
-  <div
-    style={{ width: '100%', height: '100%' }}
-    onClick={() => {
-      console.log('Modal content clicked, dropdown state:', showCityDropdown);
-      if (showCityDropdown) {
-        setShowCityDropdown(false);
-      }
-    }}
-  >
-    <h2 className="modalh2">What type of artisan do you want to hire?</h2>
-    <p>Select an artisan that you want to hire</p>
-    <div className="artisanssmodal">
-      {jobs.map((j, i) => (
-        <div
-          key={i}
-          className={`artisansmodal ${selectedArtisan === i + 1 ? 'selected' : ''}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            setSelectedArtisan(selectedArtisan === i + 1 ? 0 : i + 1);
-          }}
-        >
-          <p>{j}</p>
-        </div>
-      ))}
-    </div>
+                    isOpen={isOpen}
+                    onRequestClose={() => setIsOpen(false)}
+                    style={{
+                        overlay: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                        },
+                        content: {
+                        top: '50%',
+                        left: '50%',
+                        right: 'auto',
+                        bottom: 'auto',
+                        marginRight: '-50%',
+                        transform: 'translate(-50%, -50%)',
+                        padding: '30px',
+                        borderRadius: '12px',
+                        },
+                    }}
+                    >
+                    <div
+                        style={{ width: '100%', height: '100%' }}
+                        onClick={() => {
+                        console.log('Modal content clicked, dropdown state:', showCityDropdown);
+                        if (showCityDropdown) {
+                            setShowCityDropdown(false);
+                        }
+                        }}
+                    >
+                        <h2 className="modalh2">What type of artisan do you want to hire?</h2>
+                        <p>Select an artisan that you want to hire</p>
+                        <div className="artisanssmodal">
+                        {jobs.map((j, i) => (
+                            <div
+                            key={i}
+                            className={`artisansmodal ${selectedArtisan === i + 1 ? 'selected' : ''}`}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedArtisan(selectedArtisan === i + 1 ? 0 : i + 1);
+                            }}
+                            >
+                            <p>{j}</p>
+                            </div>
+                        ))}
+                        </div>
 
-    <div
-      className="city-dropdown-wrapper"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <input
-        className="inputbox"
-        placeholder="Your Location in Abuja"
-        value={city}
-        onClick={(e) => {
-          e.stopPropagation();
-          setShowCityDropdown(!showCityDropdown);
-        }}
-        readOnly
-      />
-      {showErrors && !city && <p className="error">Fill in the space</p>}
-      {city && !isCityValid && <p className="error">Not Available</p>}
+                        <div
+                        className="city-dropdown-wrapper"
+                        onClick={(e) => e.stopPropagation()}
+                        >
+                        <input
+                            className="inputbox"
+                            placeholder="Your Location in Abuja"
+                            value={city}
+                            onClick={(e) => {
+                            e.stopPropagation();
+                            setShowCityDropdown(!showCityDropdown);
+                            }}
+                            readOnly
+                        />
+                        {showErrors && !city && <p className="error">Fill in the space</p>}
+                        {city && !isCityValid && <p className="error">Not Available</p>}
 
-      {showCityDropdown && (
-        <div
-          className="city-dropdown"
-          style={{
-            maxHeight: '100px',
-            overflowY: 'scroll',
-            border: '1px solid #ccc',
-            marginTop: '-10px',
-            borderRadius: '4px',
-            backgroundColor: '#fff',
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {filteredCities.map((c, i) => (
-            <div
-              key={i}
-              onClick={() => {
-                setCity(c);
-                setShowCityDropdown(false);
-                setIsCityValid(true);
-              }}
-              style={{
-                padding: '8px 12px',
-                cursor: 'pointer',
-                borderBottom: '1px solid #eee',
-              }}
-            >
-              {c}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+                        {showCityDropdown && (
+                            <div
+                            className="city-dropdown"
+                            style={{
+                                maxHeight: '100px',
+                                overflowY: 'scroll',
+                                border: '1px solid #ccc',
+                                marginTop: '-10px',
+                                borderRadius: '4px',
+                                backgroundColor: '#fff',
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            >
+                            {filteredCities.map((c, i) => (
+                                <div
+                                key={i}
+                                onClick={() => {
+                                    setCity(c);
+                                    setShowCityDropdown(false);
+                                    setIsCityValid(true);
+                                }}
+                                style={{
+                                    padding: '8px 12px',
+                                    cursor: 'pointer',
+                                    borderBottom: '1px solid #eee',
+                                }}
+                                >
+                                {c}
+                                </div>
+                            ))}
+                            </div>
+                        )}
+                        </div>
 
-    <button
-      className="proceed"
-      onClick={(e) => {
-        e.stopPropagation();
-        handleProceed();
-      }}
-      disabled={city && !isCityValid}
-    >
-      Proceed
-    </button>
-  </div>
-</Modal>
+                        <button
+                        className="proceed"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleProceed();
+                        }}
+                        disabled={city && !isCityValid}
+                        >
+                        Proceed
+                        </button>
+                    </div>
+                    </Modal>
 
             <div className='artisanss'>
                 {jobs.slice(0, 5).map((j, i) => (

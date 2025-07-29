@@ -50,6 +50,7 @@ function Conversations() {
   }
 
   return (
+    <div className="conversations-container-head">
     <div className="conversations-container">
       <h2 className="title">Conversations</h2>
       {error && <p className="error-message">{error}</p>}
@@ -84,6 +85,7 @@ function Conversations() {
           })}
         </ul>
       )}
+    </div>
     </div>
   );
 }

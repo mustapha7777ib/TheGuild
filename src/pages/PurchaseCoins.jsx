@@ -113,6 +113,7 @@ function PurchaseCoins() {
   }
 
   return (
+    <div className="purchase-coins-container-head">
     <div className="purchase-coins-container">
       <h2 className="title">Purchase Coins</h2>
       <p className="current-balance">Current Balance: {coins} coins</p>
@@ -138,6 +139,7 @@ function PurchaseCoins() {
           Buy Coins with Paystack
         </button>
       </div>
+    </div>
     </div>
   );
 }

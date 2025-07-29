@@ -45,7 +45,7 @@ pool.on("error", (err) => {
 
 app.use(
   cors({
-    origin: "http://localhost:5174",
+    origin: "http://localhost:5173",
     methods: ["GET", "POST", "PUT", "PATCH", "OPTIONS"],
     credentials: true,
   })
@@ -1006,7 +1006,7 @@ app.post("/artisan/:id/purchase-coins", async (req, res) => {
     const transaction = await paystack.transaction.initialize({
       email,
       amount: amount * 100,
-      callback_url: `http://localhost:5174/purchase-coins/success`,
+      callback_url: `http://localhost:5173/purchase-coins/success`,
       metadata: { artisan_id: parseInt(id), coin_amount },
     });
     console.log(

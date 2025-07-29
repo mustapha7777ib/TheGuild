@@ -237,6 +237,9 @@ body {
     transition: opacity 0.1s ease-in-out, transform 0.2s ease-in-out;
     pointer-events: none;
 }
+.dropdown-menu2{
+  right: 0%;
+}
 
 .dropdown-menu,
 .dropdown-menu.active {
@@ -766,19 +769,6 @@ textarea {
     min-height: 80px;
 }
 
-.submitbutton {
-    display: block;
-    width: 100%;
-    padding: 0.75rem;
-    background-color: white;
-    color: purple;
-    border: none;
-    border-radius: 8px;
-    font-size: 1rem;
-    margin-top: 1.5rem;
-    cursor: pointer;
-    transition: background-color 0.3s;
-}
 
 label {
     color: white;
@@ -794,140 +784,6 @@ label {
     color: red;
     font-size: 0.9em;
     margin-top: 0.2rem;
-}
-
-.aesterik {
-    color: black;
-}
-
-.artisan-profile-container {
-    max-width: 1000px;
-    margin: 40px auto;
-    padding: 30px;
-    background-color: #04252b;
-    border-radius: 12px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-    color: white;
-}
-
-.profile-title {
-    text-align: center;
-    font-size: 2.5em;
-    margin-bottom: 30px;
-    color: white;
-}
-
-.profile-header {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-}
-
-.profile-image {
-    width: 150px;
-    height: 150px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 3px solid #ccc;
-    margin-bottom: 10px;
-}
-
-.profile-info h2 {
-    margin: 10px 0 5px;
-    font-size: 1.8em;
-}
-
-.profile-skill {
-    color: #777;
-    font-style: italic;
-}
-
-.profile-details {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    margin: 30px 0;
-    gap: 20px;
-}
-
-.details-column {
-    flex: 1;
-    min-width: 280px;
-}
-
-.details-column p {
-    margin: 10px 0;
-    line-height: 1.6;
-}
-
-.profile-section {
-    margin-bottom: 30px;
-}
-
-.profile-section h3 {
-    margin-bottom: 10px;
-    font-size: 1.2em;
-    color: #2b3a55;
-    margin-left: 150px;
-}
-
-.profile-bio {
-    background-color: #2b3a55;
-    padding: 15px;
-    border-radius: 8px;
-    line-height: 1.6;
-}
-
-.certificate-link {
-    color: #0066cc;
-    text-decoration: none;
-}
-
-.certificate-link:hover {
-    text-decoration: underline;
-}
-
-.portfolio-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 20px;
-}
-
-.portfolio-item img,
-.portfolio-item video {
-    width: 100%;
-    border-radius: 8px;
-    object-fit: cover;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-}
-
-.profile-edit-button-wrapper {
-    text-align: center;
-    margin-top: 40px;
-}
-
-.edit-button {
-    background-color: #2b3a55;
-    color: white;
-    border: none;
-    padding: 12px 25px;
-    font-size: 1em;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
-}
-
-.edit-button:hover {
-    background-color: #1e2b3a;
-}
-
-.profile-loading,
-.profile-error {
-    text-align: center;
-    margin-top: 50px;
-    color: #666;
 }
 
 .matching-artisans-page {
@@ -1032,98 +888,6 @@ label {
     margin-left: 100px;
 }
 
-.coin-balance {
-    margin-top: 2px;
-    text-decoration: none;
-}
-
-.conversations-container {
-    max-width: 800px;
-    margin: 0 auto;
-    padding: 16px;
-    background-color: #ffffff;
-    border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    margin-top: 150px;
-}
-
-.title {
-    font-size: 24px;
-    font-weight: bold;
-    color: #2d3748;
-    margin-bottom: 16px;
-}
-
-.error-message {
-    background-color: #fee2e2;
-    color: #b91c1c;
-    padding: 12px;
-    border-radius: 4px;
-    margin-bottom: 16px;
-    text-align: center;
-}
-
-.no-conversations {
-    color: #718096;
-}
-
-.conversation-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-.conversation-item {
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    margin-bottom: 8px;
-    transition: background-color 0.2s;
-}
-
-.conversation-item:hover {
-    background-color: #f7fafc;
-}
-
-.conversation-link {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px;
-    text-decoration: none;
-    color: inherit;
-}
-
-.conversation-details {
-    flex-grow: 1;
-}
-
-.conversation-name {
-    font-weight: 600;
-    color: #2d3748;
-}
-
-.artisan-label {
-    margin-left: 8px;
-    font-size: 12px;
-    color: #3182ce;
-}
-
-.conversation-preview {
-    font-size: 14px;
-    color: #4a5568;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.unread-badge {
-    background-color: #e53e3e;
-    color: white;
-    font-size: 12px;
-    padding: 4px 8px;
-    border-radius: 9999px;
-}
-
 .loading {
     text-align: center;
     color: #718096;
@@ -1223,7 +987,10 @@ label {
   overflow-y: auto;
   background-color: #f5f5f5;
 }
-
+.messagess{
+  margin-right: 0px;
+  font-weight: 400;
+}
 
 
 .message.sent {
@@ -1276,10 +1043,6 @@ label {
   background-color: #04252b;
 }
 
-.error-message {
-  color: #ff4d4f;
-  margin: 10px 0;
-}
 
 .coin-warning {
     background-color: #fef3c7;
@@ -1319,55 +1082,6 @@ label {
 
 .back-link:hover {
     color: #1d4ed8;
-}
-
-.purchase-coins-container {
-    max-width: 600px;
-    margin: 2rem auto;
-    padding: 2rem;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    text-align: center;
-    margin-top: 150px;
-}
-
-.current-balance {
-    font-size: 1.2rem;
-    margin-bottom: 1rem;
-}
-
-.success-message {
-    color: green;
-    margin: 1rem 0;
-}
-
-.purchase-form {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-}
-
-.form-label {
-    font-size: 1.1rem;
-}
-
-.cost-info {
-    font-size: 1rem;
-    color: #555;
-}
-
-.purchase-btn {
-    padding: 0.75rem;
-    background-color: #28a745;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    font-size: 1.1rem;
-    cursor: pointer;
-}
-
-.purchase-btn:hover {
-    background-color: #218838;
 }
 
 .error-boundary {
@@ -1512,18 +1226,9 @@ label {
   min-height: 100px;
 }
 
-.error-message {
-  color: red;
-  margin-bottom: 1rem;
-}
-
 .success-message {
   color: green;
   margin-bottom: 1rem;
-}
-
-.aesterik {
-  color: red;
 }
 .job-postings-grid {
   display: grid;
@@ -1582,20 +1287,6 @@ label {
 .chat-button:hover {
   background-color: #218838;
 }
-
-.submitbutton {
-  background-color: #04252b;
-  color: white;
-  padding: 0.5rem 1rem;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.submitbutton:hover {
-  background-color: #04252b;
-}
-
 .view-profile-button {
   background-color: #6c757d;
   color: white;
@@ -1648,12 +1339,6 @@ label {
 .refresh-section button:hover {
   background-color: #04252b;
 }
-
-.error-message {
-  color: red;
-  margin-bottom: 10px;
-}
-
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
