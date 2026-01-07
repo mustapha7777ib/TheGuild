@@ -1,190 +1,182 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthContext";
-import Globe from "../images/globe.svg";
-import DropDown from "../images/dropdown.svg";
-import Menu from "../images/menu.svg";
-import Cancel from "../images/cancel.svg";
-import Body from "./body";
 
-function Header() {
-  const [show, setShow] = useState(true);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [showLangDropdown, setShowLangDropdown] = useState(false);
-  const [language, setLanguage] = useState("en");
+// Assets
+import MenuIcon from "../images/menu.svg"; 
+import CancelIcon from "../images/cancel.svg";
+
+function useOutsideClick(ref, callback) {
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) callback();
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [ref, callback]);
+}
+
+const Header = () => {
   const { user, logout, artisanId, isArtisan, coins } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
-  const dropdownRef = useRef(null);
-  const langDropdownRef = useRef(null);
+  const { pathname } = useLocation();
 
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  const profileRef = useRef(null);
+
+  useOutsideClick(profileRef, () => setDropdownOpen(false));
+
+  // Auto-close menu on route change
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setDropdownOpen(false);
-      }
-      if (langDropdownRef.current && !langDropdownRef.current.contains(event.target)) {
-        setShowLangDropdown(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    setIsMenuOpen(false);
+  }, [pathname]);
+
+  const isAuthPage = ["/signin", "/signup"].includes(pathname);
+  const isPurchasePage = pathname === "/purchase-coins";
+  const hideExtras = isAuthPage || isPurchasePage;
+  const hasValidArtisanId = artisanId && artisanId !== "null";
+
+  const handleScroll = useCallback(() => {
+    setScrolled(window.scrollY > 20);
   }, []);
 
-  const changeLanguage = (lang) => {
-    setLanguage(lang);
-    setShowLangDropdown(false);
-    if (lang === "ar") {
-      document.body.classList.add("rtl");
-      document.body.classList.remove("ltr");
-      document.documentElement.lang = "ar";
-      document.documentElement.dir = "rtl";
-    } else {
-      document.body.classList.add("ltr");
-      document.body.classList.remove("rtl");
-      document.documentElement.lang = "en";
-      document.documentElement.dir = "ltr";
-    }
-  };
+  useEffect(() => {
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [handleScroll]);
 
-  const handleLogout = () => {
-    logout();
-    navigate("/signin");
-  };
-
-  const handleClick = () => {
-    setShow((prevShow) => !prevShow);
-  };
-
-  const scrollToSection = (id) => {
-    const section = document.getElementById(id);
-    if (section) section.scrollIntoView({ behavior: "smooth" });
-  };
-
-  const isHomePage = location.pathname === "/";
-  const isLoginOrSignupPage = location.pathname === "/signin" || location.pathname === "/signup";
-  const isPurchaseCoinsPage = location.pathname === "/purchase-coins";
+  const styles = useMemo(() => ({
+    nav: scrolled 
+      ? "bg-stone-900/95 border-stone-800 shadow-xl" 
+      : "bg-transparent border-transparent",
+    text: "text-stone-100 hover:text-amber-500 transition-colors text-sm font-medium",
+    btnSecondary: "flex items-center px-4 py-2 border border-white/20 text-stone-100 text-sm font-medium hover:bg-white/10 transition",
+    mobileLink: "block text-lg font-serif text-stone-100 hover:text-amber-500 py-4 border-b border-stone-800/50"
+  }), [scrolled]);
 
   return (
-    <div>
-      <div className="header">
-        <div className="header1">
-          <Link to="/" className="buttons">Work Up</Link>
-        </div>
-        <div className="header2">
-          {!isLoginOrSignupPage && !isPurchaseCoinsPage &&(
-            <div onClick={handleClick} className={show ? "hamburger" : "hamburger-1"}>
-              <img src={Menu} alt="Menu" className="hamburger-icon" />
-            </div>
-          )}
-          {!isLoginOrSignupPage && !isPurchaseCoinsPage &&(
-            <div onClick={handleClick} className={show ? "cancel-1" : "cancel"}>
-              <img src={Cancel} alt="Cancel" className="cancel-icon" />
-            </div>
-          )}
-          {!isLoginOrSignupPage && !isPurchaseCoinsPage &&(
-            <div ref={langDropdownRef} className="dropdown-container" onClick={() => setShowLangDropdown(!showLangDropdown)}>
-              <img src={Globe} style={{ width: "20px", height: "20px", marginRight: "5px" }} alt="Globe icon" />
-              <button className="buttonss" aria-label="Select language" aria-expanded={showLangDropdown}>
-                {language === "en" ? "EN" : "AR"}
-              </button>
-              <img src={DropDown} style={{ width: "20px", height: "20px", marginLeft: "-25px", marginRight: "0px", paddingRight: "0px" }} alt="Dropdown icon" />
-            </div>
-          )}
-          {user ? (
-            <div ref={dropdownRef} className="log">
-              {isArtisan && coins !== null && !isPurchaseCoinsPage && (
-                <Link
-                  to="/purchase-coins"
-                  onClick={() => scrollToSection("contact")}
-                  className="buttonssss messagess"
-                  style={{marginTop: "-9px" }}
-                >
-                  Coins: {coins}
-                </Link>
-              )}
-              {user.role === "admin" && (
-                <Link to="/admin" className="admin-btn buttonss" style={{ marginLeft: "10px" }}>
-                  Admin Dashboard
-                </Link>
-              )}
-              {user && !isPurchaseCoinsPage && <Link to="/conversations" className="buttonssss messagess">Messages</Link>}
-              {!isPurchaseCoinsPage &&
-              <button
-                className="buttonssss"
-                onClick={() => setDropdownOpen(!dropdownOpen)}
-                aria-label="User menu"
-                aria-expanded={dropdownOpen}
-              >
-                < span className="text-scroll">{user.username || "Profile"}</span>
-              </button>
-}
-              {dropdownOpen &&  (
-                <div className="dropdown-menu dropdown-menu2">
-                  {artisanId && artisanId !== "null" ? (
-                    <Link
-                      to="/artisan-profile"
-                      className="dropdown-item buttonss"
-                      onClick={() => setDropdownOpen(false)}
-                    >
-                      My Profile
-                    </Link>
-                  ) : (
-                    <Link
-                      to="/profile"
-                      className="dropdown-item buttonss"
-                      onClick={() => setDropdownOpen(false)}
-                    >
-                      Become an Artisan
-                    </Link>
-                  )}
-                  <div
-                    className="dropdown-item buttonss"
-                    onClick={handleLogout}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => e.key === "Enter" && handleLogout()}
-                  >
-                    Logout
-                  </div>
+    <>
+      <nav className={`fixed top-0 w-full z-[60] border-b transition-all duration-300 ${styles.nav}`}>
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="flex justify-between items-center h-20">
+            
+            {/* Logo */}
+            <Link to="/" className="group flex flex-col z-50">
+              <span className="text-2xl font-serif font-medium tracking-tight text-white group-hover:text-amber-500 transition-colors">
+                The Guild
+              </span>
+              <span className="text-[10px] uppercase tracking-[0.3em] text-amber-500/80 -mt-1">
+                Master Craftsmen
+              </span>
+            </Link>
+
+            <div className="flex items-center space-x-6">
+              {/* Desktop Nav */}
+              {!hideExtras && (
+                <div className="hidden lg:flex items-center space-x-8 mr-4">
+                  <Link to="/gallery" className={styles.text}>Collections</Link>
+                  <Link to="/workers" className={styles.text}>The Workshop</Link>
                 </div>
               )}
+
+              {/* User / Auth Section */}
+              <div className="flex items-center">
+                {user ? (
+                  <div className="relative flex items-center space-x-4 md:space-x-6" ref={profileRef}>
+                    {isArtisan && coins !== null && !isPurchasePage && (
+                      <Link to="/purchase-coins" className="hidden md:flex items-center px-3 py-1 bg-amber-500/10 text-amber-500 text-[10px] font-bold rounded-full border border-amber-500/30">
+                        {coins} Credits
+                      </Link>
+                    )}
+
+                    <button 
+                      onClick={() => setDropdownOpen(!dropdownOpen)}
+                      className="hidden sm:block px-4 py-2 border border-white/20 text-stone-100 text-sm font-medium hover:bg-white/10"
+                    >
+                      {user.username || "Account"}
+                    </button>
+
+                    {/* Mobile Menu Toggle Button */}
+                    {!hideExtras && (
+                      <button 
+                        onClick={() => setIsMenuOpen(!isMenuOpen)}
+                        className="lg:hidden p-2 text-white hover:bg-white/10 rounded-full transition-colors"
+                      >
+                        <img src={isMenuOpen ? CancelIcon : MenuIcon} className="w-6 h-6 invert" alt="toggle menu" />
+                      </button>
+                    )}
+
+                    {/* Desktop Account Dropdown */}
+                    {dropdownOpen && (
+                      <div className="absolute right-0 top-full mt-3 w-56 bg-stone-900 border border-stone-800 rounded-sm shadow-2xl overflow-hidden z-50 py-2 hidden sm:block">
+                        <Link to={hasValidArtisanId ? "/artisan-profile" : "/profile"} className="block px-4 py-3 text-sm text-stone-300 hover:bg-stone-800">
+                          {hasValidArtisanId ? "My Workshop" : "Become an Artisan"}
+                        </Link>
+                        <button onClick={() => { logout(); navigate("/signin"); }} className="block w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-950/30">
+                          Sign Out
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  !isAuthPage && (
+                    <div className="flex items-center space-x-4">
+                      <Link to="/signin" className="text-sm font-medium text-stone-100 hover:text-amber-500">Login</Link>
+                      <Link to="/signup" className="px-6 py-2 bg-amber-600 text-white text-sm font-medium hover:bg-amber-700">Join</Link>
+                      {!hideExtras && (
+                        <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="lg:hidden p-2 text-white">
+                          <img src={isMenuOpen ? CancelIcon : MenuIcon} className="w-6 h-6 invert" alt="toggle" />
+                        </button>
+                      )}
+                    </div>
+                  )
+                )}
+              </div>
             </div>
-          ) : (
-            !isLoginOrSignupPage && (
-              <div className="log">
-                <Link className="buttonssss" to="/signin"><span className="text-scroll">Log in</span></Link>
-                <Link className="buttonsss" to="/signup"><span className="text-scroll">Get Started</span></Link>
-              </div>
-            )
-          )}
-          {!isLoginOrSignupPage && showLangDropdown && (
-            <div className="dropdown-menu">
-              <div
-                className="dropdown-item buttonss"
-                onClick={() => changeLanguage("en")}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === "Enter" && changeLanguage("en")}
-              >
-                EN
-              </div>
-              <div
-                className="dropdown-item buttonss"
-                onClick={() => changeLanguage("ar")}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === "Enter" && changeLanguage("ar")}
-              >
-                AR
-              </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* --- Mobile Menu Overlay --- */}
+      <div 
+        className={`fixed inset-0 z-[55] bg-stone-950 transition-transform duration-500 lg:hidden ${
+          isMenuOpen ? "translate-y-0" : "-translate-y-full"
+        }`}
+      >
+        <div className="flex flex-col h-full pt-28 px-8 pb-10">
+          {!hideExtras && (
+            <div className="flex flex-col">
+              <Link to="/gallery" className={styles.mobileLink}>Collections</Link>
+              <Link to="/artisans" className={styles.mobileLink}>The Workshop</Link>
+              {user && <Link to="/conversations" className={styles.mobileLink}>Inquiries</Link>}
+              <Link to={hasValidArtisanId ? "/artisan-profile" : "/profile"} className={styles.mobileLink}>
+                {hasValidArtisanId ? "My Workshop" : "Become an Artisan"}
+              </Link>
             </div>
           )}
+
+          <div className="mt-auto space-y-4">
+            {user ? (
+              <button 
+                onClick={() => { logout(); navigate("/signin"); }}
+                className="w-full py-4 text-center text-red-400 bg-red-950/20 border border-red-900/50 rounded-sm"
+              >
+                Sign Out
+              </button>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <Link to="/signin" className="py-4 text-center text-white border border-white/10">Login</Link>
+                <Link to="/signup" className="py-4 text-center bg-amber-600 text-white">Join the Guild</Link>
+              </div>
+            )}
+          </div>
         </div>
       </div>
-      <Body show={show} setShow={setShow} />
-    </div>
+    </>
   );
-}
+};
 
 export default Header;

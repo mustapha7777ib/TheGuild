@@ -23,6 +23,8 @@ import Review from "./reviews.jsx";
 import AdminDashboard from './AdminDashboard.jsx';
 import Process from './process.jsx';
 import Testimonials from './testimonials.jsx';
+import Hero from './hero.jsx';
+import Gallery from './gallery.jsx';
 
 function ProtectedRoute({ children, requireAdmin = false }) {
   const { user, loading } = useAuth();
@@ -35,15 +37,16 @@ function ProtectedRoute({ children, requireAdmin = false }) {
 function App() {
   const { loading } = useAuth();
   const location = useLocation();
-    const isLoginOrSignupPage = location.pathname === "/signin" || location.pathname === "/signup";
+    const isHome = location.pathname === "/";
 
 
   if (loading) return <div className="loading">Loading...</div>;
 
   return (
     <>
-    {!isLoginOrSignupPage && (
+    {isHome && (
       <Header />
+      
     )}
       <Routes>
         <Route
@@ -51,6 +54,7 @@ function App() {
           element={
             <>
               <div >
+                <Hero/>
                 <Services />
                 <Process/>
                 <About />
@@ -64,6 +68,7 @@ function App() {
         <Route path="/join" element={<Join />} />
         <Route path="/signin" element={<SignIn />} />
         <Route path="/signup" element={<SignUp />} />
+        <Route path="/gallery" element={<Gallery />} />
         <Route
           path="/profile"
           element={

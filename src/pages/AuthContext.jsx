@@ -12,189 +12,110 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-  const checkSessionAndFetchUser = async () => {
+  const checkSessionAndFetchUser = useCallback(async () => {
     try {
       const response = await fetch("http://localhost:8080/auth/check-session", {
         credentials: "include",
       });
-      console.log("Auth check status:", response.status);
+
       if (!response.ok) {
-        console.error("Auth check failed:", response.status);
+        // If session is invalid, clear local states
         localStorage.removeItem("user");
         localStorage.removeItem("coins");
-        setLoading(false);
+        setUser(null);
+        setIsArtisan(false);
+        setArtisanId(null);
+        setCoins(null);
         return;
       }
-      const sessionUser = await response.json();
-      console.log("Session user:", sessionUser);
-      localStorage.setItem("user", JSON.stringify(sessionUser));
-      setUser(sessionUser);
-      // Continue with artisan and coins fetching as before
-      if (sessionUser.artisanId) {
-        const response = await fetch(`http://localhost:8080/artisan/${sessionUser.artisanId}`);
-        if (response.ok) {
-          const artisanData = await response.json();
-          setIsArtisan(!!artisanData.id);
-          setArtisanId(artisanData.id || null);
-          if (artisanData.id) {
-            const coinsResponse = await fetch(`http://localhost:8080/artisan/${artisanData.id}/coins`);
-            if (coinsResponse.ok) {
-              const { coins: newCoins } = await coinsResponse.json();
-              setCoins(newCoins);
-              localStorage.setItem("coins", newCoins.toString());
-            } else {
-              setCoins(null);
-              localStorage.removeItem("coins");
-            }
+
+      const rawUser = await response.json();
+      
+      // Normalize data: Map backend snake_case to frontend camelCase
+      const formattedUser = {
+        ...rawUser,
+        artisanId: rawUser.artisanid || rawUser.artisanId,
+        firstName: rawUser.first_name || rawUser.firstName,
+        lastName: rawUser.last_name || rawUser.lastName,
+      };
+
+      setUser(formattedUser);
+      localStorage.setItem("user", JSON.stringify(formattedUser));
+
+      // Handle Artisan specific data if ID exists
+      const targetArtisanId = formattedUser.artisanId;
+      if (targetArtisanId && targetArtisanId !== "null") {
+        const artResponse = await fetch(`http://localhost:8080/artisan/${targetArtisanId}`);
+        if (artResponse.ok) {
+          const artisanData = await artResponse.json();
+          setIsArtisan(true);
+          setArtisanId(artisanData.id);
+
+          // Fetch Coins
+          const coinsRes = await fetch(`http://localhost:8080/artisan/${artisanData.id}/coins`);
+          if (coinsRes.ok) {
+            const { coins: newCoins } = await coinsRes.json();
+            setCoins(newCoins);
+            localStorage.setItem("coins", newCoins.toString());
           }
-        } else {
-          setIsArtisan(false);
-          setArtisanId(null);
-          setCoins(null);
-          localStorage.removeItem("coins");
-        }
-      }
-    } catch (err) {
-      console.error("Error checking session or fetching user:", err);
-      setError("Failed to load user data");
-      localStorage.removeItem("user");
-      localStorage.removeItem("coins");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const storedUserRaw = localStorage.getItem("user");
-  if (storedUserRaw) {
-    checkSessionAndFetchUser();
-  } else {
-    setLoading(false);
-  }
-}, []);
-
-  const login = useCallback(async (userData) => {
-    if (!userData || !userData.id || !userData.email) {
-      setError("Invalid user data");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-      localStorage.setItem("user", JSON.stringify(userData));
-      setUser(userData);
-
-      if (userData.artisanId) {
-        const response = await fetch(`http://localhost:8080/artisan/${userData.artisanId}`);
-        if (response.ok) {
-          const artisanData = await response.json();
-          setIsArtisan(!!artisanData.id);
-          setArtisanId(artisanData.id || null);
-          if (artisanData.id) {
-            const coinsResponse = await fetch(`http://localhost:8080/artisan/${artisanData.id}/coins`);
-            if (coinsResponse.ok) {
-              const { coins: newCoins } = await coinsResponse.json();
-              setCoins(newCoins);
-              localStorage.setItem("coins", newCoins.toString());
-            } else {
-              setCoins(null);
-              localStorage.removeItem("coins");
-            }
-          }
-        } else {
-          setIsArtisan(false);
-          setArtisanId(null);
-          setCoins(null);
-          localStorage.removeItem("coins");
         }
       } else {
         setIsArtisan(false);
         setArtisanId(null);
         setCoins(null);
-        localStorage.removeItem("coins");
       }
     } catch (err) {
-      console.error("Login error:", err);
-      setError("Failed to log in");
+      console.error("Auth sync error:", err);
+      setError("Failed to sync session");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Run session check on every page load/refresh
+  useEffect(() => {
+    checkSessionAndFetchUser();
+  }, [checkSessionAndFetchUser]);
+
+  const login = useCallback(async (userData) => {
+    if (!userData) return;
+
+    // Normalize incoming login data immediately
+    const formattedUser = {
+      ...userData,
+      artisanId: userData.artisanid || userData.artisanId,
+    };
+
+    setUser(formattedUser);
+    localStorage.setItem("user", JSON.stringify(formattedUser));
+    
+    // Trigger a full sync to get coins and artisan details
+    await checkSessionAndFetchUser();
+  }, [checkSessionAndFetchUser]);
+
+  const logout = useCallback(async () => {
+    try {
+      await fetch("http://localhost:8080/logout", { method: "POST", credentials: "include" });
+    } catch (err) {
+      console.error("Logout error:", err);
+    } finally {
       localStorage.removeItem("user");
       localStorage.removeItem("coins");
       setUser(null);
       setIsArtisan(false);
       setArtisanId(null);
       setCoins(null);
-    } finally {
-      setLoading(false);
+      navigate("/signin");
     }
-  }, []);
-
-  const logout = useCallback(() => {
-    localStorage.removeItem("user");
-    localStorage.removeItem("coins");
-    setUser(null);
-    setIsArtisan(false);
-    setArtisanId(null);
-    setCoins(null);
-    setError(null);
-    navigate("/signin");
   }, [navigate]);
 
-  const setArtisan = useCallback(async (id) => {
-    if (!id) {
-      setError("Invalid artisan ID");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await fetch(`http://localhost:8080/artisan/${id}`);
-      if (response.ok) {
-        const artisanData = await response.json();
-        setIsArtisan(!!artisanData.id);
-        setArtisanId(artisanData.id || null);
-        if (artisanData.id) {
-          const coinsResponse = await fetch(`http://localhost:8080/artisan/${artisanData.id}/coins`);
-          if (coinsResponse.ok) {
-            const { coins: newCoins } = await coinsResponse.json();
-            setCoins(newCoins);
-            localStorage.setItem("coins", newCoins.toString());
-          } else {
-            setCoins(null);
-            localStorage.removeItem("coins");
-          }
-        }
-      } else {
-        setError("Failed to fetch artisan data");
-        setIsArtisan(false);
-        setArtisanId(null);
-        setCoins(null);
-        localStorage.removeItem("coins");
-      }
-    } catch (err) {
-      console.error("Error setting artisan:", err);
-      setError("Failed to set artisan");
-      setIsArtisan(false);
-      setArtisanId(null);
-      setCoins(null);
-      localStorage.removeItem("coins");
-    } finally {
-      setLoading(false);
-    }
+  const updateCoins = useCallback((newCoins) => {
+    setCoins(newCoins);
+    localStorage.setItem("coins", newCoins.toString());
   }, []);
 
   const setArtisanStatus = useCallback((status) => {
-    const isArtisanStatus = status === "true" || status === true;
-    setIsArtisan(isArtisanStatus);
-  }, []);
-
-  const updateCoins = useCallback((newCoins) => {
-    if (typeof newCoins !== "number" || newCoins < 0) {
-      setError("Invalid coin amount");
-      return;
-    }
-    setCoins(newCoins);
-    localStorage.setItem("coins", newCoins.toString());
+    setIsArtisan(!!status);
   }, []);
 
   return (
@@ -203,14 +124,15 @@ export const AuthProvider = ({ children }) => {
         user,
         login,
         logout,
-        setArtisan,
-        setArtisanStatus,
         isArtisan,
         artisanId,
+        setArtisanId,
         coins,
         updateCoins,
+        setArtisanStatus,
         loading,
         error,
+        refreshUser: checkSessionAndFetchUser // Expose refresh for use after profile updates
       }}
     >
       {children}
@@ -220,8 +142,6 @@ export const AuthProvider = ({ children }) => {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
+  if (!context) throw new Error("useAuth must be used within an AuthProvider");
   return context;
 };

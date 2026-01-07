@@ -1,90 +1,88 @@
 const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
-const { Pool } = require("pg");
+const { Pool } = require("@neondatabase/serverless");
 const path = require("path");
 const fs = require("fs");
 const bcrypt = require("bcryptjs");
 const Paystack = require("paystack-api");
 const session = require("express-session");
 const PgSession = require("connect-pg-simple")(session);
-const SALT_ROUNDS = 10;
 const nodemailer = require("nodemailer");
 
 require("dotenv").config();
-console.log("SESSION_SECRET:", process.env.SESSION_SECRET || "No SESSION_SECRET set, using fallback");
 
+const SALT_ROUNDS = 10;
 const app = express();
+
 const pool = new Pool({
-  user: "postgres",
-  host: "localhost",
-  database: "artisans",
-  password: "password",
-  port: 5432,
+  connectionString: process.env.DATABASE_URL,
+});
+const connectWithRetry = async () => {
+  console.log("⏳ Attempting to connect to Neon...");
+  try {
+    const client = await pool.connect();
+    await client.query("SELECT 1");
+    client.release();
+    console.log("✅ Connected to Neon PostgreSQL");
+  } catch (err) {
+    console.error("❌ Connection failed, retrying in 5 seconds...", err.message);
+    setTimeout(connectWithRetry, 8080); // Wait 5s and try again
+  }
+};
+
+connectWithRetry();
+
+pool.on("error", (err) => {
+  console.error("❌ Database error:", err.stack);
 });
 
 if (!process.env.PAYSTACK_SECRET_KEY) {
-  console.error("PAYSTACK_SECRET_KEY is not set in .env file");
+  console.error("❌ PAYSTACK_SECRET_KEY is not set in .env file");
   process.exit(1);
 }
 
 const paystack = Paystack(process.env.PAYSTACK_SECRET_KEY);
 
-// Test database connection on startup
-pool.connect((err) => {
-  if (err) {
-    console.error("Failed to connect to PostgreSQL:", err.message);
-    process.exit(1);
-  }
-  console.log("Connected to PostgreSQL database");
-});
-
-pool.on("error", (err) => {
-  console.error("Database connection error:", err.stack);
-});
-
-app.use(
-  cors({
-    origin: "http://localhost:5173",
-    methods: ["GET", "POST", "PUT", "PATCH", "OPTIONS"],
-    credentials: true,
-  })
-);
-app.use(express.json());
-app.use("/uploads", express.static(path.join(__dirname, "Uploads")));
 const sessionStore = new PgSession({
   pool,
   tableName: "session",
 });
+
+app.use(cors({
+  origin: "http://localhost:5173",
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "OPTIONS"],
+}));
+
+app.use(express.json());
+app.use("/uploads", express.static(path.join(__dirname, "Uploads")));
+app.set("trust proxy", 1);
+
 app.use(
   session({
     store: sessionStore,
-    secret: process.env.SESSION_SECRET || "your-secret-key",
+    secret: process.env.SESSION_SECRET || "fallback-secret",
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: false,
+      secure: process.env.NODE_ENV === "production",
       httpOnly: true,
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       maxAge: 24 * 60 * 60 * 1000,
-      sameSite: "lax",
     },
   })
 );
-
 const uploadDir = path.join(__dirname, "Uploads");
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "Uploads/");
-  },
-  filename: function (req, file, cb) {
-    const uniqueName = `${Date.now()}-${file.originalname}`;
-    cb(null, uniqueName);
-  },
+  destination: (req, file, cb) => cb(null, "Uploads/"),
+  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
 });
 
 const upload = multer({ storage });
+
 
 const ensureAdmin = async (req, res, next) => {
   console.log("ensureAdmin: Cookies =", req.headers.cookie || "No cookies");
@@ -117,60 +115,31 @@ const messagesRouter = express.Router();
 
 messagesRouter.get("/conversations-summary/:userId", async (req, res) => {
   const { userId } = req.params;
-  console.log("server.js: GET /conversations-summary/", userId);
-  if (!userId || userId === "undefined" || isNaN(userId)) {
-    console.error("server.js: Invalid userId:", userId);
-    return res.status(400).json({ error: "Invalid userId" });
-  }
   try {
-    const messages = await pool.query(
-      `SELECT DISTINCT ON (
-        LEAST(sender_id, receiver_id), 
-        GREATEST(sender_id, receiver_id)
-      ) m.*, 
+    const result = await pool.query(
+      `SELECT DISTINCT ON (other_id)
+        sub.other_id as receiver_id,
         u.first_name, u.last_name,
-        (SELECT COUNT(*) FROM messages m2 
-         WHERE m2.receiver_id = $1 AND m2.sender_id = CASE 
-           WHEN m.sender_id = $1 THEN m.receiver_id 
-           ELSE m.sender_id 
-         END AND m2.read = false) as unread_count,
-        a.id as artisan_id
-      FROM messages m
-      JOIN users u ON u.id = CASE
-        WHEN m.sender_id = $1 THEN m.receiver_id
-        ELSE m.sender_id
-      END
-      LEFT JOIN users a_user ON a_user.id = CASE
-        WHEN m.sender_id = $1 THEN m.receiver_id
-        ELSE m.sender_id
-      END
-      LEFT JOIN artisans a ON a.id = a_user.artisanid
-      WHERE m.sender_id = $1 OR m.receiver_id = $1
-      ORDER BY 
-        LEAST(sender_id, receiver_id), 
-        GREATEST(sender_id, receiver_id), 
-        m.timestamp DESC;`,
+        sub.content, sub.timestamp
+      FROM (
+        SELECT 
+          CASE WHEN sender_id = $1 THEN receiver_id ELSE sender_id END as other_id,
+          content, timestamp
+        FROM messages
+        WHERE sender_id = $1 OR receiver_id = $1
+        ORDER BY timestamp DESC
+      ) sub
+      JOIN users u ON u.id = sub.other_id
+      ORDER BY other_id, sub.timestamp DESC`,
       [parseInt(userId)]
     );
-    console.log(
-      "server.js: Conversations fetched for user",
-      userId,
-      ":",
-      messages.rows.length
-    );
-    const validConversations = messages.rows.filter((row) => {
-      const otherUserId =
-        row.sender_id === parseInt(userId) ? row.receiver_id : row.sender_id;
-      if (!otherUserId || otherUserId === "undefined") return false;
-      return true;
-    });
-    res.json(validConversations);
+    console.log(`BACKEND DEBUG: Found ${result.rows.length} conversations`);
+    res.json(result.rows);
   } catch (err) {
-    console.error("Error fetching conversations:", err.message, err.stack);
-    res.status(500).json({ error: "Server error" });
+    console.error("BACKEND ERROR Summary:", err.message);
+    res.status(500).send(err.message);
   }
 });
-
 messagesRouter.get("/conversations/:userId/:otherUserId", async (req, res) => {
   const { userId, otherUserId } = req.params;
   console.log("server.js: GET /conversations/", userId, "/", otherUserId);
@@ -197,17 +166,11 @@ messagesRouter.get("/conversations/:userId/:otherUserId", async (req, res) => {
        ORDER BY timestamp ASC`,
       [parseInt(userId), parseInt(otherUserId)]
     );
-    console.log(
-      "server.js: Messages fetched for",
-      userId,
-      otherUserId,
-      ":",
-      messages.rows.length
-    );
+  console.log(`BACKEND DEBUG: Found ${messages.rows.length} messages`);
     res.json(messages.rows);
   } catch (err) {
-    console.error("Error fetching conversation:", err.message, err.stack);
-    res.status(500).json({ error: "Server error" });
+    console.error("BACKEND ERROR Messages:", err.message);
+    res.status(500).send(err.message);
   }
 });
 
@@ -429,10 +392,10 @@ app.post("/signup", async (req, res) => {
       });
 
       const mailOptions = {
-        from: `"Work Up Team" <${process.env.EMAIL_USER}>`,
+        from: `"The Guild Team" <${process.env.EMAIL_USER}>`,
         to: email,
-        subject: "Your Work Up Account Verification",
-        text: `Hello ${firstName},\n\nThank you for signing up! Your verification code is ${verificationCode}. Please enter it on the signup page to complete your registration.\n\nBest,\nThe Work Up Team`,
+        subject: "Your The Guild Account Verification",
+        text: `Hello ${firstName},\n\nThank you for signing up! Your verification code is ${verificationCode}. Please enter it on the signup page to complete your registration.\n\nBest,\nThe Guild Team`,
       };
 
       await transporter.sendMail(mailOptions);
@@ -617,31 +580,30 @@ app.get("/users/by-artisan/:artisanId", async (req, res) => {
 
 app.put("/link-artisan-to-user", async (req, res) => {
   const { userId, artisanId } = req.body;
-  console.log("server.js: PUT /link-artisan-to-user", { userId, artisanId });
-  if (!userId || !artisanId) {
-    console.error("server.js: Missing userId or artisanId:", {
-      userId,
-      artisanId,
-    });
-    return res.status(400).json({ error: "Missing userId or artisanId" });
-  }
+  
   try {
     const result = await pool.query(
       `UPDATE users SET artisanid = $1 WHERE id = $2 RETURNING *`,
       [parseInt(artisanId), parseInt(userId)]
     );
-    console.log("server.js: User linked to artisan:", result.rows);
-    if (result.rows.length === 0) {
-      console.error("server.js: User not found:", userId);
-      return res.status(404).json({ error: "User not found" });
+
+    if (result.rows.length > 0) {
+      // CRITICAL: Update the session with the new artisanId
+      req.session.userId = result.rows[0].id; 
+      
+      // Save the session to the database before responding
+      req.session.save((err) => {
+        if (err) console.error("Session save error:", err);
+        res.status(200).json({
+          message: "User linked to artisan successfully",
+          user: result.rows[0],
+        });
+      });
+    } else {
+      res.status(404).json({ error: "User not found" });
     }
-    res.status(200).json({
-      message: "User linked to artisan successfully",
-      user: result.rows[0],
-    });
   } catch (err) {
-    console.error("Failed to link artisan to user:", err.message, err.stack);
-    res.status(500).json({ error: "Server error: " + err.message });
+    res.status(500).json({ error: "Server error" });
   }
 });
 
@@ -742,77 +704,22 @@ app.post("/register-artisan", upload.any(), async (req, res) => {
   }
 });
 
+// server.js
 app.get("/artisan/:id", async (req, res) => {
-  const { id } = req.params;
-  console.log("server.js: GET /artisan/", id);
-  if (!id || isNaN(parseInt(id))) {
-    console.error("server.js: Invalid artisan ID:", id);
-    return res.status(400).json({ error: "Invalid artisan ID" });
-  }
   try {
-    const artisanResult = await pool.query(
-      "SELECT * FROM artisans WHERE id = $1",
-      [parseInt(id)]
+    const { id } = req.params;
+    // We JOIN with the users table to get the actual user_id of the artisan
+    const result = await pool.query(
+      `SELECT a.*, u.id as user_id 
+       FROM artisans a 
+       JOIN users u ON a.user_id = u.id 
+       WHERE a.id = $1`, 
+      [id]
     );
-    console.log(
-      "server.js: Artisan fetch for ID",
-      id,
-      ":",
-      artisanResult.rows
-    );
-    if (artisanResult.rows.length === 0) {
-      console.error("server.js: Artisan not found for ID:", id);
-      return res.status(404).json({ error: "Artisan not found" });
-    }
-    const dealsResult = await pool.query(
-      `SELECT d.*, u.first_name, u.last_name,
-              EXISTS (
-                SELECT 1 FROM job_postings jp WHERE jp.deal_id = d.id
-              ) as job_posting
-       FROM deals d
-       JOIN users u ON u.id = d.user_id
-       WHERE d.artisan_id = $1`,
-      [parseInt(id)]
-    );
-    console.log("server.js: Deals for artisan", id, ":", dealsResult.rows);
-    const jobPostingsResult = await pool.query(
-      `SELECT jp.*, 
-              COALESCE(
-                (SELECT json_agg(
-                  json_build_object(
-                    'id', r.id,
-                    'rating', r.rating,
-                    'comment', r.comment,
-                    'first_name', u.first_name,
-                    'last_name', u.last_name,
-                    'created_at', r.created_at
-                  )
-                )
-                FROM reviews r
-                JOIN users u ON u.id = r.user_id
-                WHERE r.deal_id = jp.deal_id),
-                '[]'::json
-              ) as reviews
-       FROM job_postings jp
-       WHERE jp.artisan_id = $1
-       ORDER BY jp.created_at DESC`,
-      [parseInt(id)]
-    );
-    console.log(
-      "server.js: Job postings for artisan",
-      id,
-      ":",
-      jobPostingsResult.rows
-    );
-    const artisan = {
-      ...artisanResult.rows[0],
-      deals: dealsResult.rows,
-      job_postings: jobPostingsResult.rows,
-    };
-    res.json(artisan);
+    if (result.rows.length === 0) return res.status(404).json({ error: "Not found" });
+    res.json(result.rows[0]);
   } catch (err) {
-    console.error("server.js: Error fetching artisan:", err.message, err.stack);
-    res.status(500).json({ error: "Server error: " + err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -842,9 +749,69 @@ app.get("/artisan/:id/reviews", async (req, res) => {
 
 app.put("/artisan/:id", upload.any(), async (req, res) => {
   const { id } = req.params;
-  console.log("server.js: PUT /artisan/", id);
+  
+  console.log("--- START UPDATE PROCESS ---");
+  console.log("Artisan ID:", id);
+  console.log("Files received:", req.files?.map(f => ({ field: f.fieldname, name: f.filename })));
+
   try {
+    // 1. Extract non-file data from req.body
     const {
+      firstname, lastname, phone, email, gender, dob,
+      city, address, skill, experience, bio, reference,
+      existingPortfolio // This comes as a JSON string from the frontend
+    } = req.body;
+
+    // 2. Initialize file variables
+    let profilePic = null;
+    let certificate = null;
+    
+    // Initialize portfolio with existing files (if any)
+    let portfolioArray = [];
+    try {
+      portfolioArray = existingPortfolio ? JSON.parse(existingPortfolio) : [];
+    } catch (e) {
+      console.error("Error parsing existingPortfolio:", e);
+      portfolioArray = [];
+    }
+
+    // 3. Process incoming files from Multer
+    if (req.files && req.files.length > 0) {
+      req.files.forEach((file) => {
+        // MATCHING FRONTEND NAMES: profilePic, certificate, portfolio
+        if (file.fieldname === "profilePic") {
+          profilePic = file.filename;
+        } else if (file.fieldname === "certificate") {
+          certificate = file.filename;
+        } else if (file.fieldname === "portfolio") {
+          portfolioArray.push(file.filename);
+        }
+      });
+    }
+
+    // 4. Update the Database
+    const query = `
+      UPDATE artisans 
+      SET 
+        firstname = $1, 
+        lastname = $2, 
+        phone = $3, 
+        email = $4, 
+        gender = $5, 
+        dob = $6, 
+        city = $7, 
+        address = $8, 
+        skill = $9, 
+        experience = $10, 
+        bio = $11, 
+        profile_pic = COALESCE($12, profile_pic), 
+        certificate = COALESCE($13, certificate), 
+        reference = $14, 
+        portfolio = $15
+      WHERE id = $16
+      RETURNING *`;
+
+    const values = [
       firstname,
       lastname,
       phone,
@@ -856,76 +823,30 @@ app.put("/artisan/:id", upload.any(), async (req, res) => {
       skill,
       experience,
       bio,
+      profilePic,       // Will be null if no new file, COALESCE handles keeping old pic
+      certificate,      // Will be null if no new file, COALESCE handles keeping old cert
       reference,
-      existingPortfolio,
-    } = req.body;
-    let profilePic = null;
-    let certificate = null;
-    const portfolio = existingPortfolio ? JSON.parse(existingPortfolio) : [];
-    req.files.forEach((file) => {
-      if (file.fieldname === "profile_pic") profilePic = file.filename;
-      else if (file.fieldname === "certificate") certificate = file.filename;
-      else if (file.fieldname === "portfolio") portfolio.push(file.filename);
+      JSON.stringify(portfolioArray), // Store as JSON string in DB
+      parseInt(id)
+    ];
+
+    const result = await pool.query(query, values);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Artisan record not found" });
+    }
+
+    console.log("Update Successful for Artisan:", id);
+    
+    // 5. Send back the updated data
+    res.status(200).json({ 
+      message: "Profile updated successfully", 
+      data: result.rows[0] 
     });
-    if (
-      !firstname ||
-      !lastname ||
-      !phone ||
-      !email ||
-      !gender ||
-      !dob ||
-      !city ||
-      !address ||
-      !skill ||
-      !experience ||
-      !bio
-    ) {
-      console.error("server.js: Missing required fields:", req.body);
-      return res.status(400).json({ error: "Missing required fields" });
-    }
-    const artisanCheck = await pool.query(
-      `SELECT id FROM artisans WHERE id = $1`,
-      [parseInt(id)]
-    );
-    console.log("server.js: Artisan check for ID", id, ":", artisanCheck.rows);
-    if (artisanCheck.rows.length === 0) {
-      console.error("server.js: Artisan not found:", id);
-      return res.status(404).json({ error: "Artisan not found" });
-    }
-    const result = await pool.query(
-      `UPDATE artisans 
-       SET firstname = $1, lastname = $2, phone = $3, email = $4, gender = $5, dob = $6, 
-           city = $7, address = $8, skill = $9, experience = $10, bio = $11, 
-           profile_pic = COALESCE($12, profile_pic), certificate = COALESCE($13, certificate), 
-           reference = $14, portfolio = $15
-       WHERE id = $16
-       RETURNING *`,
-      [
-        firstname,
-        lastname,
-        phone,
-        email,
-        gender,
-        dob,
-        city,
-        address,
-        skill,
-        experience,
-        bio,
-        profilePic,
-        certificate,
-        reference,
-        portfolio.length > 0 ? JSON.stringify(portfolio) : null,
-        parseInt(id),
-      ]
-    );
-    console.log("server.js: Artisan updated:", result.rows[0]);
-    res
-      .status(200)
-      .json({ message: "Profile updated successfully", data: result.rows[0] });
+
   } catch (err) {
-    console.error("Error updating artisan:", err.message, err.stack);
-    res.status(500).json({ error: "Server error: " + err.message });
+    console.error("Critical Error in PUT /artisan/:id:", err.message);
+    res.status(500).json({ error: "Internal Server Error", details: err.message });
   }
 });
 
@@ -1394,26 +1315,35 @@ app.get("/api/admin/recent-signups", ensureAdmin, async (req, res) => {
 });
 app.get("/auth/check-session", async (req, res) => {
   if (!req.session.userId) {
-    console.log("server.js: No active session");
     return res.status(401).json({ error: "No active session" });
   }
+
   try {
-    const result = await pool.query(
-      `SELECT id, email, first_name, last_name, artisanid, role FROM users WHERE id = $1`,
+    // We query the DB every time so the artisanId is always fresh
+    const userResult = await pool.query(
+      "SELECT id, email, first_name, last_name, artisanid, role FROM users WHERE id = $1",
       [req.session.userId]
     );
-    if (result.rows.length === 0) {
-      console.error("server.js: User not found for session:", req.session.userId);
+
+    if (userResult.rows.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
-    console.log("server.js: Session validated for user:", req.session.userId);
-    res.json(result.rows[0]);
+
+    const user = userResult.rows[0];
+    
+    // Return the fresh data to the frontend
+    res.json({
+      id: user.id,
+      email: user.email,
+      username: user.first_name, // Or however you display the name
+      artisanId: user.artisanid,  // If this is null in DB, it will be null here
+      role: user.role
+    });
   } catch (err) {
-    console.error("server.js: Error checking session:", err.message);
-    res.status(500).json({ error: "Server error" });
+    console.error("Session Check Error:", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
-
 app.post("/logout", (req, res) => {
   req.session.destroy((err) => {
     if (err) {
@@ -1746,5 +1676,7 @@ app.use((err, req, res, next) => {
   console.error("Unhandled error:", err.message, err.stack);
   res.status(500).json({ error: "Something went wrong!" });
 });
-
-app.listen(8080, () => console.log("Server running on http://localhost:8080"));
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
+});

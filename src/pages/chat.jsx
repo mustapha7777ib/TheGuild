@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 
 function Chat() {
   const { user } = useAuth();
-  const { artisanId } = useParams();
+  const { artisanId: urlArtisanId } = useParams(); 
   const navigate = useNavigate();
+  
   const [conversations, setConversations] = useState([]);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
@@ -13,435 +14,178 @@ function Chat() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [artisanIdInput, setArtisanIdInput] = useState("");
-  const [isConfirming, setIsConfirming] = useState(false);
   const messagesEndRef = useRef(null);
 
-  const setErrorWithTimeout = (message) => {
-    setError(message);
-    setTimeout(() => setError(""), 5000);
-  };
-
-  // Fetch conversations for the sidebar
+  // 1. Auto-load Artisan from URL if present
   useEffect(() => {
-    if (!user) {
-      console.log("No user logged in, redirecting to /");
-      navigate("/");
-      return;
-    }
-
-    const fetchConversations = async () => {
-      try {
-        console.log(`Fetching conversations for user ID: ${user.id}`);
-        const response = await fetch(
-          `http://localhost:8080/api/messages/conversations-summary/${user.id}`,
-          { credentials: "include" }
-        );
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(`Failed to fetch conversations: ${errorData.error || response.statusText}`);
-        }
-        const data = await response.json();
-        console.log("Conversations fetched:", data);
-        setConversations(data);
-        setLoading(false);
-      } catch (err) {
-        console.error("Error fetching conversations:", err.message, err.stack);
-        setErrorWithTimeout("Failed to load conversations.");
-        setLoading(false);
-      }
-    };
-
-    fetchConversations();
-  }, [user, navigate]);
-
-  // Handle artisanId from URL
-  useEffect(() => {
-    if (!artisanId || !user) return;
-
-    const fetchArtisanUser = async () => {
-      try {
-        console.log(`Fetching artisan data for ID: ${artisanId}`);
-        const artisanResponse = await fetch(`http://localhost:8080/artisan/${artisanId}`, {
-          credentials: "include",
-        });
-        if (!artisanResponse.ok) {
-          const errorData = await artisanResponse.json().catch(() => ({}));
-          throw new Error(`Invalid artisan: ${errorData.error || artisanResponse.statusText}`);
-        }
-        const artisan = await artisanResponse.json();
-        console.log("Artisan data:", artisan);
-
-        console.log(`Fetching user linked to artisan ID: ${artisanId}`);
-        const userResponse = await fetch(`http://localhost:8080/users/by-artisan/${artisanId}`, {
-          credentials: "include",
-        });
-        if (!userResponse.ok) {
-          const errorData = await userResponse.json().catch(() => ({}));
-          throw new Error(`No user linked to artisan: ${errorData.error || userResponse.statusText}`);
-        }
-        const userData = await userResponse.json();
-        console.log("Linked user data:", userData);
-
-        const conversation = {
-          receiver_id: userData.id,
-          artisan_id: parseInt(artisanId),
-          first_name: artisan.firstname,
-          last_name: artisan.lastname,
-        };
-        setSelectedConversation(conversation);
-        console.log("Selected conversation set from URL:", conversation);
-
-        // Update conversations to include this artisan if not present
-        setConversations((prev) => {
-          const exists = prev.some(
-            (conv) =>
-              (conv.sender_id === user.id && conv.receiver_id === userData.id) ||
-              (conv.sender_id === userData.id && conv.receiver_id === user.id)
-          );
-          if (!exists) {
-            return [
-              ...prev,
-              {
-                sender_id: user.id,
-                receiver_id: userData.id,
-                first_name: artisan.firstname,
-                last_name: artisan.lastname,
-                artisan_id: parseInt(artisanId),
-                content: "",
-                unread_count: 0,
-              },
-            ];
+    const loadUrlArtisan = async () => {
+      if (urlArtisanId && user) {
+        try {
+          const res = await fetch(`http://localhost:8080/artisan/${urlArtisanId}`);
+          if (res.ok) {
+            const data = await res.json();
+            setSelectedConversation({
+              receiver_id: data.user_id || data.id, 
+              first_name: data.firstname,
+              last_name: data.lastname,
+              artisan_id: data.id
+            });
           }
-          return prev;
-        });
-      } catch (err) {
-        console.error("Error validating artisan from URL:", err.message, err.stack);
-        setErrorWithTimeout(err.message);
+        } catch (err) {
+          setError("Failed to locate artisan archives.");
+        }
       }
     };
+    loadUrlArtisan();
+  }, [urlArtisanId, user]);
 
-    fetchArtisanUser();
-  }, [artisanId, user]);
+  // 2. Fetch Sidebar Conversations
+  const fetchConversations = useCallback(async () => {
+    if (!user) return;
+    try {
+      const response = await fetch(`http://localhost:8080/api/messages/conversations-summary/${user.id}`, { credentials: "include" });
+      if (response.ok) setConversations(await response.json());
+      setLoading(false);
+    } catch (err) {
+      setLoading(false);
+    }
+  }, [user]);
 
-  // Fetch messages for the selected conversation
+  useEffect(() => {
+    if (!user) { navigate("/signin"); return; }
+    fetchConversations();
+  }, [user, navigate, fetchConversations]);
+
+  // 3. Polling Messages
   useEffect(() => {
     if (!selectedConversation || !user) return;
-
     const fetchMessages = async () => {
       try {
-        console.log(`Fetching messages for user ${user.id} and receiver ${selectedConversation.receiver_id}`);
-        const response = await fetch(
-          `http://localhost:8080/api/messages/conversations/${user.id}/${selectedConversation.receiver_id}`,
-          { credentials: "include" }
-        );
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(`Failed to fetch messages: ${errorData.error || response.statusText}`);
-        }
-        const data = await response.json();
-        setMessages(data);
-        console.log("Messages fetched:", data);
-
-        console.log(`Marking messages as read from ${selectedConversation.receiver_id} to ${user.id}`);
-        await fetch(`http://localhost:8080/api/messages/mark-as-read`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sender_id: selectedConversation.receiver_id,
-            receiver_id: user.id,
-          }),
-          credentials: "include",
-        });
-      } catch (err) {
-        console.error("Error fetching messages:", err.message, err.stack);
-        setErrorWithTimeout("Failed to load messages.");
-      }
+        const response = await fetch(`http://localhost:8080/api/messages/conversations/${user.id}/${selectedConversation.receiver_id}`, { credentials: "include" });
+        if (response.ok) setMessages(await response.json());
+      } catch (err) { console.error(err); }
     };
-
     fetchMessages();
-    const interval = setInterval(fetchMessages, 5000);
+    const interval = setInterval(fetchMessages, 4000);
     return () => clearInterval(interval);
   }, [selectedConversation, user]);
 
-  // Scroll to the latest message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Handle sending a new message
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!newMessage.trim()) {
-      setErrorWithTimeout("Message cannot be empty.");
-      return;
-    }
-
+    if (!newMessage.trim() || !selectedConversation) return;
     try {
-      console.log(`Sending message from ${user.id} to ${selectedConversation.receiver_id}: ${newMessage}`);
       const response = await fetch(`http://localhost:8080/api/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sender_id: user.id,
-          receiver_id: selectedConversation.receiver_id,
-          content: newMessage,
+        body: JSON.stringify({ 
+          sender_id: user.id, 
+          receiver_id: selectedConversation.receiver_id, 
+          content: newMessage 
         }),
         credentials: "include",
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to send message");
+      if (response.ok) {
+        setNewMessage("");
+        const sent = await response.json();
+        setMessages(prev => [...prev, sent]);
+        fetchConversations();
       }
-
-      const sentMessage = await response.json();
-      setMessages((prev) => [...prev, sentMessage]);
-      console.log("Message sent:", sentMessage);
-
-      // Update conversations to reflect new message
-      setConversations((prev) =>
-        prev.map((conv) =>
-          (conv.sender_id === user.id && conv.receiver_id === selectedConversation.receiver_id) ||
-          (conv.sender_id === selectedConversation.receiver_id && conv.receiver_id === user.id)
-            ? { ...conv, content: newMessage, timestamp: sentMessage.timestamp }
-            : conv
-        )
-      );
-
-      setNewMessage("");
-      setError("");
-    } catch (err) {
-      console.error("Error sending message:", err.message, err.stack);
-      setErrorWithTimeout(err.message);
-    }
+    } catch (err) { setError("Message failed to deliver."); }
   };
 
-  // Handle confirming a deal
-  const handleConfirmDeal = async () => {
-    if (isConfirming) {
-      console.log("[Confirm Deal] Already processing, ignoring click");
-      return;
-    }
-
-    setIsConfirming(true);
-    try {
-      console.log(`[Confirm Deal] Starting for artisan ${selectedConversation.artisan_id} and user ${user.id}`);
-      console.log(`[Confirm Deal] Calling /confirm-deal with payload:`, {
-        artisanId: parseInt(selectedConversation.artisan_id),
-        userId: user.id,
-      });
-      const confirmResponse = await fetch(`http://localhost:8080/confirm-deal`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ artisanId: parseInt(selectedConversation.artisan_id), userId: user.id }),
-        credentials: "include",
-      });
-
-      if (!confirmResponse.ok) {
-        const errorData = await confirmResponse.json();
-        throw new Error(`Failed to confirm deal: ${errorData.error || confirmResponse.statusText}`);
-      }
-
-      const confirmData = await confirmResponse.json();
-      console.log("[Confirm Deal] /confirm-deal response:", confirmData);
-
-      console.log(`[Confirm Deal] Fetching artisan data for ID: ${selectedConversation.artisan_id}`);
-      const artisanResponse = await fetch(`http://localhost:8080/artisan/${selectedConversation.artisan_id}`, {
-        credentials: "include",
-      });
-      if (!artisanResponse.ok) throw new Error("Failed to fetch artisan data");
-      const artisanData = await artisanResponse.json();
-      const currentCoins = artisanData.coins || 0;
-      console.log(`[Confirm Deal] Artisan coins before deduction: ${currentCoins}`);
-
-      const newCoins = Math.max(0, currentCoins - 25);
-      console.log(`[Confirm Deal] Calculated new coins: ${newCoins} (deducting 25 from ${currentCoins})`);
-
-      console.log(`[Confirm Deal] Updating coins to ${newCoins} via /artisan/${selectedConversation.artisan_id}/update-coins`);
-      const updateCoinsResponse = await fetch(`http://localhost:8080/artisan/${selectedConversation.artisan_id}/update-coins`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ coins: newCoins }),
-        credentials: "include",
-      });
-
-      if (!updateCoinsResponse.ok) {
-        const errorData = await updateCoinsResponse.json();
-        throw new Error(`Failed to update artisan coins: ${errorData.error || updateCoinsResponse.statusText}`);
-      }
-
-      console.log(`[Confirm Deal] Coins updated successfully. New balance: ${newCoins}`);
-      alert(`${confirmData.message} 25 coins have been deducted from the artisan's balance.`);
-
-      const updatedUser = { ...user, hasConfirmedDeal: true, lastConfirmedArtisanId: selectedConversation.artisan_id };
-      localStorage.setItem("user", JSON.stringify(updatedUser));
-
-      console.log(`[Confirm Deal] Navigating to /review/${selectedConversation.artisan_id}`);
-      navigate(`/review/${selectedConversation.artisan_id}`);
-    } finally {
-      setIsConfirming(false);
-    }
-  };
-
-  // Handle artisan ID input submission
-  const handleArtisanIdSubmit = async (e) => {
-    e.preventDefault();
-    if (!artisanIdInput.trim() || isNaN(parseInt(artisanIdInput))) {
-      setErrorWithTimeout("Please enter a valid artisan ID.");
-      return;
-    }
-
-    try {
-      console.log(`Fetching artisan data for input ID: ${artisanIdInput}`);
-      const artisanResponse = await fetch(`http://localhost:8080/artisan/${artisanIdInput}`, {
-        credentials: "include",
-      });
-      if (!artisanResponse.ok) {
-        const errorData = await artisanResponse.json().catch(() => ({}));
-        throw new Error(`Invalid artisan: ${errorData.error || artisanResponse.statusText}`);
-      }
-      const artisan = await artisanResponse.json();
-      console.log("Artisan data from input:", artisan);
-
-      console.log(`Fetching user linked to artisan ID: ${artisanIdInput}`);
-      const userResponse = await fetch(`http://localhost:8080/users/by-artisan/${artisanIdInput}`, {
-        credentials: "include",
-      });
-      if (!userResponse.ok) {
-        const errorData = await userResponse.json().catch(() => ({}));
-        throw new Error(`No user linked to artisan: ${errorData.error || userResponse.statusText}`);
-      }
-      const userData = await userResponse.json();
-      console.log("Linked user data from input:", userData);
-
-      const conversation = {
-        receiver_id: userData.id,
-        artisan_id: parseInt(artisanIdInput),
-        first_name: artisan.firstname,
-        last_name: artisan.lastname,
-      };
-      setSelectedConversation(conversation);
-      console.log("Selected conversation set from input:", conversation);
-
-      // Update conversations to include this artisan if not present
-      setConversations((prev) => {
-        const exists = prev.some(
-          (conv) =>
-            (conv.sender_id === user.id && conv.receiver_id === userData.id) ||
-            (conv.sender_id === userData.id && conv.receiver_id === user.id)
-        );
-        if (!exists) {
-          return [
-            ...prev,
-            {
-              sender_id: user.id,
-              receiver_id: userData.id,
-              first_name: artisan.firstname,
-              last_name: artisan.lastname,
-              artisan_id: parseInt(artisanIdInput),
-              content: "",
-              unread_count: 0,
-            },
-          ];
-        }
-        return prev;
-      });
-
-      setArtisanIdInput("");
-      setError("");
-    } catch (err) {
-      console.error("Error starting chat with artisan ID input:", err.message, err.stack);
-      setErrorWithTimeout(err.message);
-    }
-  };
-
-  if (loading) return <p>Loading conversations...</p>;
-  if (!user) return <p>Please log in to view chats.</p>;
+  if (loading) return (
+    <div className="min-h-screen bg-stone-50 flex items-center justify-center">
+      <div className="w-8 h-8 border-2 border-stone-200 border-t-amber-600 rounded-full animate-spin" />
+    </div>
+  );
 
   return (
-    <div className="chat-container">
-      <div className="sidebar">
-        <h2>Conversations</h2>
-        {error && <p className="error-message">{error}</p>}
-        {conversations.length === 0 ? (
-          <p>No conversations yet.</p>
-        ) : (
-          <ul>
-            {conversations.map((conv) => (
-              <li
+    <div className="flex h-screen bg-stone-100 text-stone-800 font-sans overflow-hidden">
+      {/* Sidebar (Same as previous design) */}
+      <div className="w-80 bg-white border-r border-stone-200 flex flex-col shadow-xl z-20">
+        <div className="p-6 border-b border-stone-100 bg-stone-50/50">
+          <h2 className="font-serif text-2xl text-stone-900 tracking-tight">Guild Messages</h2>
+          <p className="text-[10px] uppercase tracking-[0.4em] text-stone-400 mt-1 font-bold">Secure Consultations</p>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {conversations.map((conv) => {
+            const receiverId = conv.sender_id === user.id ? conv.receiver_id : conv.sender_id;
+            const isActive = selectedConversation?.receiver_id === receiverId;
+            return (
+              <div
                 key={`${conv.sender_id}-${conv.receiver_id}`}
-                onClick={() =>
-                  setSelectedConversation({
-                    receiver_id: conv.sender_id === user.id ? conv.receiver_id : conv.sender_id,
-                    first_name: conv.first_name,
-                    last_name: conv.last_name,
-                    artisan_id: conv.artisan_id,
-                  })
-                }
-                className={selectedConversation?.receiver_id === (conv.sender_id === user.id ? conv.receiver_id : conv.sender_id) ? "active" : ""}
+                onClick={() => {
+                   setSelectedConversation({
+                     receiver_id: receiverId,
+                     first_name: conv.first_name,
+                     last_name: conv.last_name,
+                     artisan_id: conv.artisan_id,
+                   });
+                   navigate(`/chat/${conv.artisan_id || ''}`); // Keep URL in sync
+                }}
+                className={`p-5 cursor-pointer transition-all border-b border-stone-50 ${isActive ? 'bg-amber-50/60 border-l-4 border-l-amber-600' : 'hover:bg-stone-50'}`}
               >
-                {conv.first_name} {conv.last_name}
-                {conv.unread_count > 0 && <span className="unread-count">{conv.unread_count}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-        <form onSubmit={handleArtisanIdSubmit} className="artisan-id-form">
-          <input
-            type="text"
-            value={artisanIdInput}
-            onChange={(e) => setArtisanIdInput(e.target.value)}
-            placeholder="Enter Artisan ID"
-          />
-          <button type="submit">Start Chat</button>
-        </form>
+                <h4 className={`text-sm font-bold ${isActive ? 'text-amber-900' : 'text-stone-700'}`}>
+                  {conv.first_name} {conv.last_name}
+                </h4>
+                <p className="text-xs text-stone-400 truncate mt-1 italic">{conv.content || "Opening consultation..."}</p>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      <div className="chat-main">
+      {/* Main Chat Pane */}
+      <div className="flex-1 flex flex-col bg-stone-50">
         {selectedConversation ? (
           <>
-            <div className="chat-header">
-              <h3>
-                Chat with {selectedConversation.first_name} {selectedConversation.last_name}
-              </h3>
-              {user && !user.artisanId && selectedConversation.artisan_id && (
-                <button
-                  onClick={handleConfirmDeal}
-                  className="confirm-deal-button"
-                  disabled={isConfirming}
-                >
-                  Confirm Deal
-                </button>
-              )}
-            </div>
-            <div className="messages">
-              {messages.length === 0 ? (
-                <p>No messages yet. Start the conversation!</p>
-              ) : (
-                messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`message ${msg.sender_id === user.id ? "sent" : "received"}`}
-                  >
-                    <p>{msg.content}</p>
-                    <small>{new Date(msg.timestamp).toLocaleString()}</small>
+            <div className="px-8 py-5 border-b border-stone-200 bg-white/90 flex justify-between items-center">
+               <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center font-serif text-amber-700 font-bold">
+                    {selectedConversation.first_name[0]}
                   </div>
-                ))
-              )}
+                  <div>
+                    <h3 className="font-serif text-xl">{selectedConversation.first_name} {selectedConversation.last_name}</h3>
+                    <p className="text-[9px] uppercase tracking-widest text-stone-400 font-bold">Verified Professional</p>
+                  </div>
+               </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-[url('https://www.transparenttextures.com/patterns/cream-paper.png')]">
+              {messages.map((msg) => (
+                <div key={msg.id} className={`flex ${msg.sender_id === user.id ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[70%] p-4 rounded-2xl shadow-sm text-sm ${
+                    msg.sender_id === user.id ? 'bg-stone-900 text-white rounded-tr-none' : 'bg-white border border-stone-200 text-stone-800 rounded-tl-none'
+                  }`}>
+                    {msg.content}
+                  </div>
+                </div>
+              ))}
               <div ref={messagesEndRef} />
             </div>
-            <form onSubmit={handleSendMessage} className="message-form">
+
+            <form onSubmit={handleSendMessage} className="p-6 bg-white border-t border-stone-200 flex gap-4">
               <input
                 type="text"
+                className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-amber-600 transition-all"
+                placeholder="Write your inquiry..."
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Type a message..."
               />
-              <button type="submit">Send</button>
+              <button type="submit" className="bg-amber-600 text-white px-6 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-stone-900 transition-all">
+                Send
+              </button>
             </form>
           </>
         ) : (
-          <p>Select a conversation or enter an artisan ID to start chatting, it is the last number in route.</p>
+          <div className="flex-1 flex items-center justify-center italic text-stone-400 font-serif">
+            Select a thread from the ledger to begin.
+          </div>
         )}
       </div>
     </div>

@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+@layer base {
+  html, body, #root {
+    @apply font-sans;
+  }
+  *, *::before, *::after {
+    font-family: inherit;
+  }
+}
